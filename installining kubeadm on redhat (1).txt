@@ -1,0 +1,90 @@
+installing kubernetes on redhat:
+================================
+step1:
+installing docker on redhat:
+============================
+yum update -y
+sudo yum install -y yum-utils
+sudo yum-config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo
+
+vi /etc/yum.repos.d/docker-ce.repo
+
+[docker-ce-stable]
+name=Docker CE Stable - $basearch
+baseurl=https://download.docker.com/linux/centos/$releasever/$basearch/stable
+enabled=1
+gpgcheck=1
+gpgkey=https://download.docker.com/linux/centos/gpg
+
+sudo yum install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
+
+step2:
+installing kubeadm on redhat:
+=============================
+
+vi install.sh
+
+swapoff -a
+
+cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+br_netfilter
+EOF
+
+cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+EOF
+
+sudo sysctl --system
+cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-\$basearch
+enabled=1
+gpgcheck=1
+gpgkey=https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+exclude=kubelet kubeadm kubectl
+EOF
+
+sudo setenforce 0
+sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
+sudo yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
+
+sudo systemctl enable --now kubelet
+sudo mkdir /etc/docker
+cat <<EOF | sudo tee /etc/docker/daemon.json
+{
+  "exec-opts": ["native.cgroupdriver=systemd"],
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "100m"
+  },
+  "storage-driver": "overlay2"
+}
+EOF
+systemctl enable docker
+systemctl daemon-reload
+systemctl restart docker
+rm -f /etc/containerd/config.toml ; systemctl restart containerd
+
+
+
+sh install.sh
+step3:
+kubeadm init
+
+export KUBECONFIG=/etc/kubernetes/admin.conf
+yum install wget -y
+wget https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+#vi kube-flannel.yml
+kubectl create -f kube-flannel.yml
+kubectl get nodes
+kubectl get nodes
+kubectl restart kubelet
+systemctl restart kubelet
+export KUBECONFIG=/etc/kubernetes/admin.conf
+swapoff -a
+kubectl get nodes
+kubectl get pods
+
+step1,2 are performed on both the machines,step3 is performed on master only
